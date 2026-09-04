@@ -197,6 +197,10 @@ def callback_publish(call):
         bot.send_message(ADMIN_ID, "✅ Опубликовано!")
     except Exception as e:
         bot.send_message(ADMIN_ID, f"❌ Ошибка: {str(e)}")
+@app.route("/")
+def home():
+    return "Бот работает круглосуточно!", 200
+
 if __name__ == "__main__":
     import threading
     

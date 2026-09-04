@@ -210,7 +210,7 @@ def getMessage():
 def webhook():
     bot.remove_webhook()
     # Сервер Render сам создаст нужный URL для подключения
-    bot.set_webhook(url=f'https://onrender.com' + BOT_TOKEN)
+    bot.set_webhook(url=f'https://school-bot-lc3u.onrender.com' + BOT_TOKEN)
     return "Бот успешно запущен на Render!", 200
 
 if __name__ == "__main__":

@@ -197,24 +197,7 @@ def callback_publish(call):
         bot.send_message(ADMIN_ID, "✅ Опубликовано!")
     except Exception as e:
         bot.send_message(ADMIN_ID, f"❌ Ошибка: {str(e)}")
-
-# Логика приема вебхуков для Render
-@app.route('/' + BOT_TOKEN, methods=['POST'])
-def getMessage():
-    json_string = request.get_data().decode('utf-8')
-    update = telebot.types.Update.de_json(json_string)
-    bot.process_new_updates([update])
-    return "!", 200
-
-@app.route("/")
-def webhook():
-    bot.remove_webhook()
-    # Бот сам возьмет имя вашего сервиса из системы Render
-    render_service_name = os.environ.get("RENDER_SERVICE_NAME", "school-bot-lc3u")
-    auto_url = f"https://{render_service_name}://{BOT_TOKEN}"
-    bot.set_webhook(url=auto_url)
-    return f"Бот успешно запущен на Render! Адрес вебхука: {auto_url}", 200
-
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    print("Бот успешно запущен на Render в режиме Polling...")
+    bot.infinity_polling()
+

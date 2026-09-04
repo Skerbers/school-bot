@@ -198,6 +198,17 @@ def callback_publish(call):
     except Exception as e:
         bot.send_message(ADMIN_ID, f"❌ Ошибка: {str(e)}")
 if __name__ == "__main__":
+    import threading
+    
+    # Запускаем веб-сервер Flask в отдельном потоке для Render
+    port = int(os.environ.get("PORT", 5000))
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port, use_reloader=False)).start()
+    
+    # Принудительно очищаем старые зависшие вебхуки Telegram при запуске!
+    print("Очистка старых вебхуков...")
+    bot.remove_webhook(drop_pending_updates=True)
+    
     print("Бот успешно запущен на Render в режиме Polling...")
     bot.infinity_polling()
+
 

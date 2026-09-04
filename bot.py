@@ -209,9 +209,12 @@ def getMessage():
 @app.route("/")
 def webhook():
     bot.remove_webhook()
-    # Сервер Render сам создаст нужный URL для подключения
-    bot.set_webhook(url=f'https://school-bot-lc3u.onrender.com' + BOT_TOKEN)
-    return "Бот успешно запущен на Render!", 200
+    # Бот сам возьмет имя вашего сервиса из системы Render
+    render_service_name = os.environ.get("RENDER_SERVICE_NAME", "school-bot-lc3u")
+    auto_url = f"https://{render_service_name}://{BOT_TOKEN}"
+    bot.set_webhook(url=auto_url)
+    return f"Бот успешно запущен на Render! Адрес вебхука: {auto_url}", 200
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

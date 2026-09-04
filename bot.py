@@ -206,7 +206,7 @@ if __name__ == "__main__":
     
     # Принудительно очищаем старые зависшие вебхуки Telegram при запуске!
     print("Очистка старых вебхуков...")
-    bot.remove_webhook(drop_pending_updates=True)
+    bot.remove_webhook()
     
     print("Бот успешно запущен на Render в режиме Polling...")
     bot.infinity_polling()

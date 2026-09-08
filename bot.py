@@ -2,26 +2,27 @@ import telebot
 from telebot import types
 from flask import Flask, request
 import os
+import threading
 
-# Автоматически берем настройки из скрытых переменных Render
+# Загружаем скрытые токены из настроек Render
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+FAKE_BOT_TOKEN = os.environ.get("FAKE_BOT_TOKEN")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", 0))
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME")
 
-# Имя вашего аккаунта на Render (нужно для вебхука)
-# Бот сам поймет адрес, прокси на Render НЕ НУЖНЫ!
+# Инициализируем обоих ботов
 bot = telebot.TeleBot(BOT_TOKEN)
+fake_bot = telebot.TeleBot(FAKE_BOT_TOKEN) if FAKE_BOT_TOKEN else None
+
 app = Flask(__name__)
 
-# Файлы базы данных на сервере
+# Файлы баз данных на сервере
 BLACKLIST_FILE = "blacklist.txt"
 USERS_FILE = "users.txt"
 STORIES_DB_FILE = "stories_db.txt"
-PROFILES_FILE = "profiles.txt"
 
 judgement_night = False
 admin_state = {}
-user_state = {}
 
 def load_list(filename):
     if os.path.exists(filename):
@@ -41,144 +42,129 @@ def remove_item(filename, item):
             for i in existing:
                 f.write(f"{i}\n")
 
-def get_profile(user_id):
-    if os.path.exists(PROFILES_FILE):
-        with open(PROFILES_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith(f"{user_id}:"):
-                    return line.split(":", 1)[1].strip()
-    return None
-
 BAN_MESSAGE = "❌ Ты забанен в нашем боте за спам или нарушение правил."
 
-@bot.message_handler(commands=['admin'])
-def cmd_admin(message):
-    if message.from_user.id != ADMIN_ID:
-        return
+# --- ОБЩАЯ КЛАВИАТУРА АДМИНА ---
+def get_admin_keyboard():
     global judgement_night
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row("📊 Статистика", "📋 Все анкеты")
+    markup.row("📊 Статистика")
     markup.row("🚫 Забанить по ID", "🟢 Разбанить по ID")
     j_text = "🩸 Выключить Судную ночь" if judgement_night else "🩸 Включить Судную ночь"
     markup.row(j_text)
     markup.row("❌ Закрыть админку")
-    bot.send_message(ADMIN_ID, "⚙️ **Админ-панель школьной подслушки:**", reply_markup=markup, parse_mode="Markdown")
+    return markup
+
+# --- ОБРАБОТКА ДЛЯ ОБОИХ БОТОВ (ФУНКЦИЯ-ОБРАБОТЧИК) ---
+def process_admin_commands(message, current_bot):
+    global judgement_night
+    if message.text == "📊 Статистика":
+        total_users = len(set(load_list(USERS_FILE)))
+        banned_users = len(load_list(BLACKLIST_FILE))
+        current_bot.send_message(ADMIN_ID, f"📈 **Статистика подслушки:**\n\n👤 Учеников в боте: `{total_users}`\n🚫 В бане: `{banned_users}`", parse_mode="Markdown")
+    
+    elif message.text == "🚫 Забанить по ID":
+        admin_state[ADMIN_ID] = "wait_ban"
+        current_bot.send_message(ADMIN_ID, "Введите ID для бана:")
+        
+    elif message.text == "🟢 Разбанить по ID":
+        admin_state[ADMIN_ID] = "wait_unban"
+        current_bot.send_message(ADMIN_ID, "Введите ID для разбана:")
+        
+    elif message.text in ["🩸 Включить Судную ночь", "🩸 Выключить Судную ночь"]:
+        judgement_night = not judgement_night
+        status = "ВКЛЮЧЕН" if judgement_night else "ВЫКЛЮЧЕН"
+        current_bot.send_message(ADMIN_ID, f"🔔 Режим Судной ночи **{status}**!", reply_markup=get_admin_keyboard())
+        
+        if judgement_night:
+            bot.send_message(CHANNEL_USERNAME, "🚨🩸 **ВНИМАНИЕ! НА КАНАЛЕ НАЧАЛАСЬ СУДНАЯ НОЧЬ!** 🩸🚨\n\nЦензура и правила отключены! Сливы публикуются прямо сейчас! 😈👇")
+        else:
+            bot.send_message(CHANNEL_USERNAME, "🛑 🩸 **СУДНАЯ НОЧЬ ОКОНЧЕНА.** 🛑\n\nРежим повышенной жесткости отключен.")
+            
+    elif message.text == "❌ Закрыть админку":
+        current_bot.send_message(ADMIN_ID, "Админка закрыта.", reply_markup=types.ReplyKeyboardRemove())
+
+    # Обработка ввода текстового ID
+    elif admin_state.get(ADMIN_ID) == "wait_ban":
+        admin_state[ADMIN_ID] = None
+        save_item(BLACKLIST_FILE, message.text.strip())
+        current_bot.send_message(ADMIN_ID, f"✅ Пользователь {message.text} забанен!")
+        
+    elif admin_state.get(ADMIN_ID) == "wait_unban":
+        admin_state[ADMIN_ID] = None
+        remove_item(BLACKLIST_FILE, message.text.strip())
+        current_bot.send_message(ADMIN_ID, f"✅ Пользователь {message.text} разбанен!")
+
+# --- СТАРТ ОСНОВНОГО БОТА (ДЛЯ УЧЕНИКОВ) ---
+@bot.message_handler(commands=['admin'])
+def main_admin(message):
+    if message.from_user.id == ADMIN_ID:
+        bot.send_message(ADMIN_ID, "⚙️ **Админ-панель (Оригинал):**", reply_markup=get_admin_keyboard(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['start'])
-def cmd_start(message):
+def main_start(message):
     user_id = message.from_user.id
     if str(user_id) in load_list(BLACKLIST_FILE):
         bot.send_message(message.chat.id, BAN_MESSAGE)
         return
-
     save_item(USERS_FILE, user_id)
-    
-    if not get_profile(user_id):
-        user_state[user_id] = "wait_profile"
-        bot.send_message(
-            message.chat.id,
-            "⚠️ **В меру безопасности админа, введена защита.**\n\n"
-            "Напиши свое имя и фамилию вместе с классом, бот зашифрует и система поймет что вы реальный ученик, а не фейк. "
-            "Админ НЕ увидит ваше имя и фамилию это полностью анонимно."
-        )
-        return
-
     if judgement_night:
         bot.send_message(message.chat.id, "🚨 **🚨 СУДНАЯ НОЧЬ НАЧАЛАСЬ!** 🚨\n\nПравила отключены! Пишите абсолютно любые сплетни! 🩸😈")
     else:
         bot.send_message(message.chat.id, "Привет! Напиши сюда свой секрет или историю, и admin опубликует её анонимно.\n\nВ самом канале никто не узнает, кто автор!")
 
 @bot.message_handler(func=lambda message: True)
-def handle_all_messages(message):
+def main_all(message):
     user_id = message.from_user.id
     if str(user_id) in load_list(BLACKLIST_FILE):
         bot.send_message(message.chat.id, BAN_MESSAGE)
         return
 
-    if user_state.get(user_id) == "wait_profile":
-        save_item(PROFILES_FILE, f"{user_id}:{message.text}")
-        user_state[user_id] = None
-        alert_admin = f"📇 **Новая анкетка деанона!**\n🆔 ID: `{user_id}`\n👤 ТГ: {message.from_user.full_name}\n📝 Ввод: `{message.text}`"
-        bot.send_message(ADMIN_ID, alert_admin, parse_mode="Markdown")
-        bot.send_message(message.chat.id, "✅ Проверка успешно пройдена! Теперь ты можешь присылать истории анонимно!")
-        return
-
     if user_id == ADMIN_ID:
-        if message.text == "📊 Статистика":
-            total_users = len(set(load_list(USERS_FILE)))
-            banned_users = len(load_list(BLACKLIST_FILE))
-            bot.send_message(ADMIN_ID, f"📈 **Статистика подслушки:**\n\n👤 Учеников в боте: `{total_users}`\n🚫 В бане: `{banned_users}`", parse_mode="Markdown")
-            return
-        elif message.text == "📋 Все анкеты":
-            if not os.path.exists(PROFILES_FILE) or os.path.getsize(PROFILES_FILE) == 0:
-                bot.send_message(ADMIN_ID, "🗄 База анкет пока пуста.")
-                return
-            output = "📋 **Список всех учеников:**\n\n"
-            with open(PROFILES_FILE, "r", encoding="utf-8") as f:
-                for line in f:
-                    if ":" in line:
-                        uid, info = line.split(":", 1)
-                        output += f"🆔 `{uid}` — {info.strip()}\n"
-            bot.send_message(ADMIN_ID, output, parse_mode="Markdown")
-            return
-        elif message.text == "🚫 Забанить по ID":
-            admin_state[ADMIN_ID] = "wait_ban"
-            bot.send_message(ADMIN_ID, "Введите ID для бана:")
-            return
-        elif message.text == "🟢 Разбанить по ID":
-            admin_state[ADMIN_ID] = "wait_unban"
-            bot.send_message(ADMIN_ID, "Введите ID для разбана:")
-            return
-        elif message.text in ["🩸 Включить Судную ночь", "🩸 Выключить Судную ночь"]:
-            global judgement_night
-            judgement_night = not judgement_night
-            status = "ВКЛЮЧЕН" if judgement_night else "ВЫКЛЮЧЕН"
-            bot.send_message(ADMIN_ID, f"🔔 Режим Судной ночи **{status}**!")
-            cmd_admin(message)
-            if judgement_night:
-                bot.send_message(CHANNEL_USERNAME, "🚨🩸 **ВНИМАНИЕ! НА КАНАЛЕ НАЧАЛАСЬ СУДНАЯ НОЧЬ!** 🩸🚨\n\nЦензура и правила отключены! Сливы публикуются прямо сейчас! 😈👇")
-            else:
-                bot.send_message(CHANNEL_USERNAME, "🛑 🩸 **СУДНАЯ НОЧЬ ОКОНЧЕНА.** 🛑\n\nРежим повышенной жесткости отключен.")
-            return
-        elif message.text == "❌ Закрыть админку":
-            bot.send_message(ADMIN_ID, "Админка закрыта.", reply_markup=types.ReplyKeyboardRemove())
-            return
-            
-        if admin_state.get(ADMIN_ID) == "wait_ban":
-            admin_state[ADMIN_ID] = None
-            save_item(BLACKLIST_FILE, message.text.strip())
-            bot.send_message(ADMIN_ID, f"✅ Пользователь {message.text} забанен!")
-            return
-        elif admin_state.get(ADMIN_ID) == "wait_unban":
-            admin_state[ADMIN_ID] = None
-            remove_item(BLACKLIST_FILE, message.text.strip())
-            bot.send_message(ADMIN_ID, f"✅ Пользователь {message.text} разбанен!")
-            return
-
-        bot.send_message(ADMIN_ID, "Используйте Reply (Ответить), чтобы написать пользователю.")
+        process_admin_commands(message, bot)
         return
 
-    # --- ПРИЕМ ИСТОРИИ ---
-    real_profile = get_profile(user_id)
-    if not real_profile:
-        user_state[user_id] = "wait_profile"
-        bot.send_message(message.chat.id, "⚠️ Сначала пройдите верификацию!")
-        return
-
+    # Прием истории
     with open(STORIES_DB_FILE, "a", encoding="utf-8") as f:
         f.write(f"{message.message_id}:{message.text.replace('\n', ' ')}\n")
 
     prefix = "🩸 [СУДНАЯ НОЧЬ]" if judgement_night else "📩 Новая история!"
-    user_info = f"{prefix}\n👤 **Отправитель:** `{real_profile}`\n🆔 ID: `{user_id}`\n-------------------------\n\n{message.text}"
+    
+    # 1. Отправляем в ОРИГИНАЛЬНОГО бота (с деаноном)
+    user_info = f"{prefix}\n🆔 ID автора (СЕКРЕТНО): `{user_id}`\n🔗 Юзернейм: @{message.from_user.username if message.from_user.username else 'отсутствует'}\n-------------------------\n\n{message.text}"
     markup = types.InlineKeyboardMarkup()
-    btn_text = "🩸 ОПУБЛИКОВАТЬ" if judgement_night else "📢 Опубликовать в канал"
-    markup.add(types.InlineKeyboardButton(text=btn_text, callback_data=f"pub_{message.message_id}"))
+    markup.add(types.InlineKeyboardButton(text="📢 Опубликовать", callback_data=f"pub_{message.message_id}"))
     bot.send_message(ADMIN_ID, user_info, parse_mode="Markdown", reply_markup=markup)
+    
+    # 2. Отправляем в КЛОНА (без деанона — для проверок завучей)
+    if fake_bot:
+        fake_info = f"📩 **Новое анонимное предложение**\nℹ️ Данные автора: сообщение анонима:\n-------------------------\n\n{message.text}"
+        fake_markup = types.InlineKeyboardMarkup()
+        fake_markup.add(types.InlineKeyboardButton(text="📢 Опубликовать анонимно", callback_data=f"pub_{message.message_id}"))
+        try: fake_bot.send_message(ADMIN_ID, fake_info, parse_mode="Markdown", reply_markup=fake_markup)
+        except: pass
+
     bot.send_message(message.chat.id, "Спасибо! Твоя история отправлена на модерацию.")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("pub_"))
-def callback_publish(call):
-    if call.from_user.id != ADMIN_ID: return
+# --- СТАРТ ФЕЙКОВОГО БОТА (КЛОНА ДЛЯ ПРОВЕРОК) ---
+if fake_bot:
+    @fake_bot.message_handler(commands=['admin'])
+    def fake_admin(message):
+        if message.from_user.id == ADMIN_ID:
+            fake_bot.send_message(ADMIN_ID, "⚙️ **Админ-панель (Анонимная версия):**", reply_markup=get_admin_keyboard(), parse_mode="Markdown")
+
+    @fake_bot.message_handler(commands=['start'])
+    def fake_start(message):
+        if message.from_user.id == ADMIN_ID:
+            fake_bot.send_message(ADMIN_ID, "Добро пожаловать в анонимную систему модерации.")
+
+    @fake_bot.message_handler(func=lambda message: True)
+    def fake_all(message):
+        if message.from_user.id == ADMIN_ID:
+            process_admin_commands(message, fake_bot)
+
+# --- ПУБЛИКАЦИЯ В КАНАЛ (ОБЩАЯ ДЛЯ ОБОИХ) ---
+def handle_publish(call, current_bot):
     try:
         msg_id_str = call.data.replace("pub_", "")
         story_text = None
@@ -189,30 +175,43 @@ def callback_publish(call):
                         story_text = line.split(":", 1)[1].strip()
                         break
         if not story_text:
-            bot.answer_callback_query(call.id, "Ошибка: история не найдена")
+            current_bot.answer_callback_query(call.id, "Ошибка: история не найдена")
             return
+        
         clean_post = f"🩸 **[СУДНАЯ НОЧЬ]** 🩸\n\n{story_text}" if judgement_night else f"{story_text}\n\n*(Анонимно)*"
         bot.send_message(chat_id=CHANNEL_USERNAME, text=clean_post)
-        bot.edit_message_reply_markup(chat_id=ADMIN_ID, message_id=call.message.message_id, reply_markup=None)
-        bot.send_message(ADMIN_ID, "✅ Опубликовано!")
+        current_bot.edit_message_reply_markup(chat_id=ADMIN_ID, message_id=call.message.message_id, reply_markup=None)
+        current_bot.send_message(ADMIN_ID, "✅ Успешно опубликовано!")
     except Exception as e:
-        bot.send_message(ADMIN_ID, f"❌ Ошибка: {str(e)}")
+        current_bot.send_message(ADMIN_ID, f"❌ Ошибка публикации: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("pub_"))
+def main_inline(call):
+    if call.from_user.id == ADMIN_ID: handle_publish(call, bot)
+
+if fake_bot:
+    @fake_bot.callback_query_handler(func=lambda call: call.data.startswith("pub_"))
+    def fake_inline(call):
+        if call.from_user.id == ADMIN_ID: handle_publish(call, fake_bot)
+
+# --- ВЕБ-СЕРВЕР Flask ДЛЯ RENDER ---
 @app.route("/")
 def home():
-    return "Бот работает круглосуточно!", 200
+    return "Оба бота работают круглосуточно!", 200
 
 if __name__ == "__main__":
-    import threading
-    
-    # Запускаем веб-сервер Flask в отдельном потоке для Render
+    # Запускаем Flask-сервер в отдельном потоке
     port = int(os.environ.get("PORT", 5000))
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port, use_reloader=False)).start()
     
-    # Принудительно очищаем старые зависшие вебхуки Telegram при запуске!
-    print("Очистка старых вебхуков...")
+    # Очищаем вебхуки основного бота
     bot.remove_webhook()
     
-    print("Бот успешно запущен на Render в режиме Polling...")
+    # Если клон подключен, запускаем его параллельно в фоновом потоке
+    if fake_bot:
+        fake_bot.remove_webhook()
+        threading.Thread(target=fake_bot.infinity_polling, daemon=True).start()
+        print("Бот-клон для проверок успешно запущен!")
+        
+    print("Основной бот успешно запущен на Render в режиме Polling...")
     bot.infinity_polling()
-
-

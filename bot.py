@@ -77,9 +77,9 @@ def process_admin_commands(message, current_bot):
         current_bot.send_message(ADMIN_ID, f"🔔 Режим Судной ночи **{status}**!", reply_markup=get_admin_keyboard())
         
         if judgement_night:
-            bot.send_message(CHANNEL_USERNAME, "🚨🩸 **ВНИМАНИЕ! НА КАНАЛЕ НАЧАЛАСЬ СУДНАЯ НОЧЬ!** 🩸🚨\n\nЦензура и правила отключены! Сливы публикуются прямо сейчас! 😈👇")
+            bot.send_message(CHANNEL_USERNAME, "🚨🩸 **ВНИМАНИЕ! НА КАНАЛЕ НАЧАЛАСЬ СУДНАЯ НОЧЬ!** 🩸🚨\n\n можно писать абсолютно все что хотите,правила отключены пока админ не остановит судную ночь*)
         else:
-            bot.send_message(CHANNEL_USERNAME, "🛑 🩸 **СУДНАЯ НОЧЬ ОКОНЧЕНА.** 🛑\n\nРежим повышенной жесткости отключен.")
+            bot.send_message(CHANNEL_USERNAME, "🛑 🩸 **СУДНАЯ НОЧЬ ОКОНЧЕНА.** 🛑\n\n теперь сообщения будут модерироваться(наверно)")
             
     elif message.text == "❌ Закрыть админку":
         current_bot.send_message(ADMIN_ID, "Админка закрыта.", reply_markup=types.ReplyKeyboardRemove())
@@ -109,7 +109,7 @@ def main_start(message):
         return
     save_item(USERS_FILE, user_id)
     if judgement_night:
-        bot.send_message(message.chat.id, "🚨 **🚨 СУДНАЯ НОЧЬ НАЧАЛАСЬ!** 🚨\n\nПравила отключены! Пишите абсолютно любые сплетни! 🩸😈")
+        bot.send_message(message.chat.id, "🚨 **🚨 СУДНАЯ НОЧЬ НАЧАЛАСЬ!** 🚨\n\nПравила отключены! Пишите абсолютно любые сплетни! 🩸")
     else:
         bot.send_message(message.chat.id, "Привет! Напиши сюда свой секрет или историю, и admin опубликует её анонимно.\n\nВ самом канале никто не узнает, кто автор!")
 
@@ -178,7 +178,7 @@ def handle_publish(call, current_bot):
             current_bot.answer_callback_query(call.id, "Ошибка: история не найдена")
             return
         
-        clean_post = f"🩸 **[СУДНАЯ НОЧЬ]** 🩸\n\n{story_text}" if judgement_night else f"{story_text}\n\n*(Анонимно)*"
+        clean_post = f"🩸 **[СУДНАЯ НОЧЬ]** 🩸\n\n{story_text}" if judgement_night else f"{story_text}\n\n*бот подслушки айыы кыьата*"
         bot.send_message(chat_id=CHANNEL_USERNAME, text=clean_post)
         current_bot.edit_message_reply_markup(chat_id=ADMIN_ID, message_id=call.message.message_id, reply_markup=None)
         current_bot.send_message(ADMIN_ID, "✅ Успешно опубликовано!")

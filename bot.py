@@ -77,9 +77,9 @@ def process_admin_commands(message, current_bot):
         current_bot.send_message(ADMIN_ID, f"🔔 Режим Судной ночи **{status}**!", reply_markup=get_admin_keyboard())
         
         if judgement_night:
-            bot.send_message(CHANNEL_USERNAME, "🚨🩸 **ВНИМАНИЕ! НА КАНАЛЕ НАЧАЛАСЬ СУДНАЯ НОЧЬ!** 🩸🚨\n\n можно писать абсолютно все что хотите,правила отключены пока админ не остановит судную ночь*)
+            bot.send_message(CHANNEL_USERNAME, "🚨🩸 **ВНИМАНИЕ! НА КАНАЛЕ НАЧАЛАСЬ СУДНАЯ НОЧЬ!** 🩸🚨\n\n можно писать абсолютно все что хотите,правила отключены пока админ не остановит судную ночь"*)
         else:
-            bot.send_message(CHANNEL_USERNAME, "🛑 🩸 **СУДНАЯ НОЧЬ ОКОНЧЕНА.** 🛑\n\n теперь сообщения будут модерироваться(наверно)")
+            bot.send_message(CHANNEL_USERNAME, "🛑 🩸 **СУДНАЯ НОЧЬ ОКОНЧЕНА.** 🛑\n\n теперь сообщения будут модерироваться(наверно)"*)
             
     elif message.text == "❌ Закрыть админку":
         current_bot.send_message(ADMIN_ID, "Админка закрыта.", reply_markup=types.ReplyKeyboardRemove())

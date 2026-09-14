@@ -138,7 +138,7 @@ def main_all(message):
     
     # 2. Отправляем в КЛОНА (без деанона — для проверок завучей)
     if fake_bot:
-        fake_info = f"📩 **Новое анонимное предложение**\nℹ️ Данные автора: сообщение анонима:\n-------------------------\n\n{message.text}"
+        fake_info = f"📩 **Новое анонимное предложение**\nℹ️cообщение анонима:\n-------------------------\n\n{message.text}"
         fake_markup = types.InlineKeyboardMarkup()
         fake_markup.add(types.InlineKeyboardButton(text="📢 Опубликовать анонимно", callback_data=f"pub_{message.message_id}"))
         try: fake_bot.send_message(ADMIN_ID, fake_info, parse_mode="Markdown", reply_markup=fake_markup)

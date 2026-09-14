@@ -113,7 +113,7 @@ def main_start(message):
     else:
         bot.send_message(message.chat.id, "Привет! Напиши сюда свой секрет или историю, и admin опубликует её анонимно.\n\nВ самом канале никто не узнает, кто автор!")
 
-@bot.message_handler(func=lambda message: True)
+@bot.message_handler(content_types=['text', 'photo', 'video', 'video_note', 'voice', 'audio', 'document'])
 def main_all(message):
     user_id = message.from_user.id
     if str(user_id) in load_list(BLACKLIST_FILE):
